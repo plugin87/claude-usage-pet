@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm -v)",
+      "Read(//Users/plug/.claude/**)",
+      "Bash(node -e \"const {collectUsage}=require\\('./usage'\\); const t=Date.now\\(\\); const d=collectUsage\\(\\); console.log\\('scan ms:', Date.now\\(\\)-t\\); console.log\\('grand:', d.grand.toLocaleString\\(\\)\\); console.log\\('today:', d.todayGrand.toLocaleString\\(\\)\\); console.log\\('files:', d.fileCount\\); console.log\\('input/output/cw/cr:', d.totals.input, d.totals.output, d.totals.cacheCreate, d.totals.cacheRead\\); console.log\\('models:', d.models.slice\\(0,4\\).map\\(m=>m.name+'='+m.total\\)\\);\")",
+      "Bash(npm install *)",
+      "Bash(node_modules/.bin/electron --version)",
+      "Bash(defaults read *)",
+      "Bash(echo \"autohide: $\\(defaults read com.apple.dock autohide 2>/dev/null\\)\")",
+      "Bash(echo \"tilesize: $\\(defaults read com.apple.dock tilesize 2>/dev/null\\)\")",
+      "Bash(echo \"orientation: $\\(defaults read com.apple.dock orientation 2>/dev/null\\)\")",
+      "Bash(node -e \"const {screen,app}=require\\('electron'\\);\")",
+      "Bash(node_modules/.bin/electron -e \"const {app,screen}=require\\('electron'\\); app.dock&&app.dock.hide\\(\\); app.whenReady\\(\\).then\\(\\(\\)=>{const d=screen.getPrimaryDisplay\\(\\); console.log\\('bounds',JSON.stringify\\(d.bounds\\)\\); console.log\\('workArea',JSON.stringify\\(d.workArea\\)\\); console.log\\('scaleFactor',d.scaleFactor\\); app.exit\\(0\\);}\\);\")",
+      "Bash(pkill -f \"claude-usage/node_modules/electron\")"
+    ]
+  }
+}

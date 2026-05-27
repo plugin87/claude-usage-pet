@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:;" />
+<title>Claude Usage Pet</title>
+<style>
+  :root {
+    --coral: #f1573d;
+    --coral-d: #c43d28;
+    --cream: #fbf7f0;
+    --ink: #2b2018;
+    --muted: #8a7563;
+    --track: #ece1d2;
+    --ok: #2fa56a;
+    --warn: #e0a32f;
+    --bad: #e2543a;
+    /* layout: the window reserves bubble room above AND below the pet so the
+       bubble can flip to whichever side keeps it on screen */
+    --bubble-space: 410px;
+    --pet-box: 132px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+  html, body {
+    width: 100%; height: 100%;
+    background: transparent; overflow: hidden;
+    font-family: -apple-system, "SF Pro Text", system-ui, sans-serif;
+    cursor: default;
+  }
+  #stage { position: absolute; inset: 0; }
+
+  /* ---------------- stats bubble ---------------- */
+  #bubble {
+    position: absolute; left: 50%; width: 268px;
+    background: var(--cream); color: var(--ink);
+    border: 2px solid var(--coral); border-radius: 16px;
+    padding: 12px 14px 13px;
+    box-shadow: 0 7px 20px rgba(90, 45, 30, 0.22);
+    opacity: 0; pointer-events: none;
+    transition: opacity .16s ease, transform .16s ease;
+  }
+  /* default: above the pet — anchored just above the mascot's actual (scaled)
+     height (--pet-vis, set from JS) so there's no big empty gap */
+  #bubble { bottom: calc(var(--bubble-space) + var(--pet-vis, 60px) + 12px);
+            transform: translateX(-50%) translateY(8px) scale(.97);
+            transform-origin: bottom center; }
+  #bubble.show { opacity: 1; transform: translateX(-50%) translateY(0) scale(1);
+                 pointer-events: auto; }
+  #bubble::after { /* tail pointing down */
+    content: ""; position: absolute; left: 50%; bottom: -10px;
+    transform: translateX(-50%);
+    border-width: 10px 9px 0 9px; border-style: solid;
+    border-color: var(--coral) transparent transparent transparent;
+  }
+  /* flipped: below the pet (used when dragged near the top of the screen) */
+  #bubble.below { bottom: auto; top: calc(var(--bubble-space) + var(--pet-box) + 6px);
+                  transform-origin: top center;
+                  transform: translateX(-50%) translateY(-8px) scale(.97); }
+  #bubble.below.show { transform: translateX(-50%) translateY(0) scale(1); }
+  #bubble.below::after { bottom: auto; top: -10px;
+    border-width: 0 9px 10px 9px;
+    border-color: transparent transparent var(--coral) transparent; }
+
+  .b-title {
+    font-size: 10.5px; font-weight: 700; letter-spacing: .05em;
+    text-transform: uppercase; color: var(--coral-d);
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  .b-title .files { font-weight: 500; opacity: .55; text-transform: none; letter-spacing: 0; }
+
+  /* tabs */
+  .tabs { display: flex; gap: 4px; margin: 8px 0 11px; }
+  .tab { flex: 1; text-align: center; font-size: 10.5px; font-weight: 600;
+         padding: 5px 0; border-radius: 8px; color: var(--muted);
+         background: var(--track); cursor: pointer; transition: background .15s, color .15s; }
+  .tab.active { background: var(--coral); color: #fff; }
+  .pane[hidden] { display: none; }
+  .sec-row { display: flex; justify-content: space-between; align-items: center; }
+  .toggle { display: flex; gap: 3px; }
+  .toggle .t { font-size: 8px; font-weight: 700; padding: 2px 7px; border-radius: 5px;
+               background: var(--track); color: var(--muted); cursor: pointer; }
+  .toggle .t.on { background: var(--coral); color: #fff; }
+
+  .grand { font-size: 26px; font-weight: 800; line-height: 1.05; margin: 3px 0 10px;
+           font-variant-numeric: tabular-nums; }
+  .grand .unit { font-size: 12px; font-weight: 600; opacity: .5; margin-left: 4px; }
+
+  /* progress blocks */
+  .blk { margin-bottom: 10px; }
+  .blk .top { display: flex; justify-content: space-between; align-items: baseline;
+              font-size: 11.5px; margin-bottom: 4px; }
+  .blk .top .lbl { font-weight: 600; color: var(--ink); }
+  .blk .top .val { font-variant-numeric: tabular-nums; color: var(--muted); }
+  .track { height: 9px; background: var(--track); border-radius: 6px; overflow: hidden; }
+  .fill { height: 100%; width: 0; border-radius: 6px; transition: width .5s ease, background .3s; }
+  .sub { font-size: 10px; color: var(--muted); margin-top: 3px; }
+  .sub b { color: var(--coral-d); font-variant-numeric: tabular-nums; }
+
+  /* 7-day chart */
+  .chart { display: flex; align-items: flex-end; gap: 4px; height: 46px;
+           margin: 2px 0 4px; padding-top: 2px; }
+  .chart .col { flex: 1; display: flex; flex-direction: column; align-items: center;
+                justify-content: flex-end; height: 100%; }
+  .chart .cbar { width: 100%; min-height: 2px; background: var(--track);
+                 border-radius: 3px; transition: height .4s ease; }
+  .chart .col.today .cbar { background: var(--coral); }
+  .chart .col .dow { font-size: 8px; color: var(--muted); margin-top: 2px; }
+  .chart .col.today .dow { color: var(--coral-d); font-weight: 700; }
+
+  /* label/value rows (compact, side-by-side) */
+  .rows { margin-top: 7px; font-size: 11px; }
+  .rows .k, .rows .v { display: inline-block; }
+  .rows { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; align-items: baseline; }
+  .rows .k { color: var(--muted); }
+  .rows .v { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600;
+             color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .section { font-size: 9px; font-weight: 700; letter-spacing: .05em;
+             text-transform: uppercase; color: var(--muted); opacity: .55;
+             margin: 9px 0 4px; }
+  .foot { font-size: 10.5px; color: var(--muted); margin-top: 8px; padding-top: 8px;
+          border-top: 1px dashed #e2d4c2; font-variant-numeric: tabular-nums; }
+  .foot b { color: var(--ink); font-weight: 700; }
+  .models { margin-top: 6px; font-size: 10px; color: var(--muted); }
+  .models .m { display: flex; justify-content: space-between; gap: 8px; }
+  .models .m .mv { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--coral-d); }
+  /* Awards / gamification tab */
+  .coin { display: inline-block; width: 11px; height: 11px; border-radius: 50%;
+          background: radial-gradient(circle at 34% 30%, #ffe79a, #eab33f 62%, #c98a22);
+          box-shadow: inset 0 0 0 1px rgba(150,100,20,.45), 0 1px 1px rgba(0,0,0,.12);
+          vertical-align: -1px; }
+  .gtop { display: flex; justify-content: space-between; align-items: center; }
+  .gtop .lv { font-weight: 800; font-size: 16px; color: var(--ink); letter-spacing: .01em; }
+  .gtop .coins { color: #b9851f; font-weight: 800; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
+  .xp { height: 9px; background: var(--track); border-radius: 6px; overflow: hidden; margin: 6px 0 3px;
+        box-shadow: inset 0 1px 1px rgba(0,0,0,.06); }
+  .xp .f { height: 100%; width: 0; border-radius: 6px; transition: width .6s cubic-bezier(.3,.9,.4,1);
+           background: linear-gradient(90deg, #f1573d, #ff8a5c); }
+  .xp-sub { font-size: 9px; color: var(--muted); }
+  .gstat { display: flex; gap: 8px; font-size: 11px; margin: 8px 0 6px; }
+  .gstat span { background: var(--track); border-radius: 7px; padding: 3px 8px; color: var(--muted); }
+  .gstat b { color: var(--coral-d); font-variant-numeric: tabular-nums; }
+  .quest { font-size: 11px; margin: 2px 0 2px; color: var(--ink); background: #fff3e8;
+           border: 1px solid #f3d9c2; border-radius: 8px; padding: 5px 9px; }
+  .quest.done { color: var(--ok); background: #effaf2; border-color: #c9ecd4; text-decoration: line-through; opacity: .85; }
+  .badges { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin: 5px 0; }
+  .badge { text-align: center; font-size: 15px; line-height: 26px; height: 26px; border-radius: 7px;
+           background: var(--track); opacity: .5; filter: grayscale(1); transition: transform .12s; }
+  .badge.on { opacity: 1; filter: none; background: #fff3e8; box-shadow: inset 0 0 0 1px #f3d9c2; }
+  .shop { display: flex; gap: 6px; margin-top: 6px; }
+  .shop .item { flex: 1; text-align: center; font-size: 10px; background: #fff;
+                border: 1px solid #ecdfcd; border-radius: 11px; padding: 8px 3px 7px; cursor: pointer;
+                line-height: 1.25; transition: transform .1s, box-shadow .15s, border-color .15s; }
+  .shop .item:hover { box-shadow: 0 4px 10px rgba(120,60,30,.13); border-color: var(--coral); }
+  .shop .item:active { transform: scale(.95); }
+  .shop .item .ico { font-size: 17px; display: block; margin-bottom: 2px; }
+  .shop .item .nm { color: var(--ink); display: block; }
+  .shop .item .c { color: #b9851f; font-weight: 800; display: inline-flex; align-items: center; gap: 3px; margin-top: 3px; }
+  .hint { margin-top: 8px; font-size: 9px; text-align: center; opacity: .42; }
+
+  /* ---------------- mascot ---------------- */
+  /* sprite.png: 8 frames of 132x114 (0-3 walk, 4 idle, 5 blink, 6 jump, 7 sit).
+     JS drives the frame (background-position), facing + size (transform). */
+  #pet {
+    position: absolute; left: 50%; top: var(--bubble-space);
+    width: 132px; height: var(--pet-box); margin-left: -66px;
+    cursor: grab;
+    background: url('assets/sprite.png') 0 100% no-repeat;
+    background-size: 1584px 114px; /* 12 frames; sits at the bottom of its box */
+    image-rendering: pixelated;
+    /* base shadow + a usage-driven glow (color set from JS via --glow) */
+    filter: drop-shadow(0 4px 4px rgba(120,40,20,.35))
+            drop-shadow(0 0 var(--glow-blur, 0px) var(--glow, transparent));
+    transform-origin: bottom center;
+    transition: transform .35s cubic-bezier(.2,.9,.3,1.2), filter .4s ease;
+  }
+  #pet.dragging { cursor: grabbing; transition: none; }
+  /* near the limit -> worried red pulse */
+  #pet.worry { animation: worry 1.1s ease-in-out infinite; }
+  @keyframes worry {
+    0%, 100% { filter: drop-shadow(0 4px 4px rgba(120,40,20,.35)) drop-shadow(0 0 2px rgba(226,84,58,.4)); }
+    50%      { filter: drop-shadow(0 4px 4px rgba(120,40,20,.35)) drop-shadow(0 0 13px rgba(226,84,58,.95)); }
+  }
+
+  /* bike ride overlay (ground level) — wheels align to the pet's floor line */
+  #bike {
+    position: absolute; left: 50%; width: 252px; height: 144px; margin-left: -126px;
+    top: calc(var(--bubble-space) + var(--pet-box) - 144px);
+    background: url('assets/bike.png') 0 0 no-repeat;
+    background-size: 504px 144px;
+    image-rendering: pixelated; display: none;
+    transform-origin: bottom center;
+    filter: drop-shadow(0 4px 5px rgba(120,40,20,.35));
+  }
+  /* jet fly-across overlay (wider sprite, replaces pet during the event) */
+  #jet {
+    position: absolute; left: 50%; top: var(--bubble-space);
+    width: 264px; height: var(--pet-box); margin-left: -132px;
+    background: url('assets/jet.png') 0 100% no-repeat;
+    background-size: 528px 132px;
+    image-rendering: pixelated; display: none;
+    transform-origin: bottom center;
+    filter: drop-shadow(0 4px 6px rgba(120,40,20,.4));
+  }
+
+  /* pet gimmicks: Zzz, food, hunger thought-bubble */
+  #zzz { position: absolute; left: 50%; margin-left: 14px; top: calc(var(--bubble-space) + 8px);
+         font-size: 15px; font-weight: 800; color: #cfc4ff; display: none;
+         text-shadow: 0 1px 2px rgba(0,0,0,.4); animation: zzz 2.4s ease-in-out infinite; }
+  @keyframes zzz { 0% { opacity: 0; transform: translateY(6px) scale(.7); }
+                   30% { opacity: 1; } 100% { opacity: 0; transform: translateY(-18px) scale(1.1); } }
+  #thought { position: absolute; left: 50%; margin-left: 12px; top: calc(var(--bubble-space) + 10px);
+             font-size: 15px; display: none; animation: bobup 1.6s ease-in-out infinite; }
+  @keyframes bobup { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+  #food { position: absolute; left: 50%; margin-left: -11px; top: calc(var(--bubble-space) + 56px);
+          width: 22px; height: 22px; background: url('assets/food.png') center/contain no-repeat;
+          image-rendering: pixelated; display: none; }
+  #food.munch { animation: munch .5s steps(1) 5; }
+  @keyframes munch { 0% { transform: scale(1); } 50% { transform: scale(.78) rotate(-8deg); } 100% { transform: scale(1); } }
+
+  /* compact pet bar + feed button inside the bubble */
+  .petbar { display: flex; justify-content: space-between; align-items: center;
+            margin-top: 7px; font-size: 10px; color: var(--muted); }
+  #feedbtn { background: var(--coral); color: #fff; font-weight: 700; padding: 3px 9px;
+             border-radius: 8px; cursor: pointer; }
+  #feedbtn:active { transform: scale(.94); }
+
+  /* floating hearts */
+  .heart {
+    position: absolute; width: 18px; height: 18px;
+    background: url('assets/heart.png') center/contain no-repeat;
+    image-rendering: pixelated; pointer-events: none;
+    animation: floatUp 1.5s ease-out forwards;
+  }
+  @keyframes floatUp {
+    0%   { opacity: 0; transform: translateY(0) scale(.6); }
+    20%  { opacity: 1; }
+    100% { opacity: 0; transform: translateY(-70px) scale(1.1); }
+  }
+</style>
+</head>
+<body>
+  <div id="stage">
+    <div id="bubble">
+      <div class="b-title"><span id="b1-title">Claude Usage</span><span class="files" id="status"></span></div>
+
+      <div class="tabs">
+        <div class="tab active" data-tab="limits">Limits</div>
+        <div class="tab" data-tab="cost">Cost</div>
+        <div class="tab" data-tab="activity">Activity</div>
+        <div class="tab" data-tab="awards">🏆</div>
+      </div>
+
+      <!-- LIMITS -->
+      <div class="pane" id="pane-limits">
+        <div class="blk">
+          <div class="top"><span class="lbl" id="lbl1">Session</span><span class="val" id="reset1"></span></div>
+          <div class="track"><div class="fill" id="fill1"></div></div>
+          <div class="sub" id="sub1"></div>
+        </div>
+        <div class="blk">
+          <div class="top"><span class="lbl" id="lbl2">Weekly</span><span class="val" id="reset2"></span></div>
+          <div class="track"><div class="fill" id="fill2"></div></div>
+          <div class="sub" id="sub2"></div>
+        </div>
+        <div class="blk" id="blk3" style="display:none">
+          <div class="top"><span class="lbl" id="lbl3"></span><span class="val" id="reset3"></span></div>
+          <div class="track"><div class="fill" id="fill3"></div></div>
+        </div>
+      </div>
+
+      <!-- COST -->
+      <div class="pane" id="pane-cost" hidden>
+        <div class="grand" id="cost-total">$0<span class="unit">≈ API value</span></div>
+        <div class="rows">
+          <div class="k">Today</div><div class="v" id="c-today">–</div>
+          <div class="k">This week</div><div class="v" id="c-week">–</div>
+          <div class="k">Last 30 days</div><div class="v" id="c-30">–</div>
+        </div>
+        <div class="section">By model</div>
+        <div class="models" id="cost-models"></div>
+      </div>
+
+      <!-- ACTIVITY -->
+      <div class="pane" id="pane-activity" hidden>
+        <div class="sec-row">
+          <div class="section" style="margin:0">Per day (7d)</div>
+          <div class="toggle"><span class="t on" id="tg-tok">tok</span><span class="t" id="tg-cost">$</span></div>
+        </div>
+        <div class="chart" id="chart"></div>
+        <div class="rows">
+          <div class="k">Total tokens</div><div class="v" id="a-tokens">–</div>
+          <div class="k">Messages</div><div class="v" id="a-msgs">–</div>
+          <div class="k">Sessions</div><div class="v" id="a-sessions">–</div>
+          <div class="k">Top project</div><div class="v" id="a-project">–</div>
+        </div>
+      </div>
+
+      <!-- AWARDS -->
+      <div class="pane" id="pane-awards" hidden>
+        <div class="gtop"><span class="lv" id="g-level">Lv.1</span><span class="coins" id="g-coins">🪙 0</span></div>
+        <div class="xp"><div class="f" id="g-xp"></div></div>
+        <div class="xp-sub" id="g-xpsub"></div>
+        <div class="gstat"><span>🔥 streak <b id="g-streak">0</b></span><span>best <b id="g-best">0</b></span></div>
+        <div class="quest" id="g-quest"></div>
+        <div class="section">Achievements</div>
+        <div class="badges" id="g-badges"></div>
+        <div class="section">Shop</div>
+        <div class="shop" id="g-shop"></div>
+      </div>
+
+      <div class="foot" id="foot"></div>
+      <div class="petbar"><span id="petmood">🐾 Clawd</span><span id="feedbtn">🍪 Feed</span></div>
+      <div class="hint" id="hint">drag · click to hide · right-click for menu</div>
+    </div>
+
+    <div id="jet"></div>
+    <div id="bike"></div>
+    <div id="thought">🍪</div>
+    <div id="zzz">z</div>
+    <div id="food"></div>
+    <div id="pet" title="Claude usage"></div>
+  </div>
+
+  <script src="mascot.js"></script>
+</body>
+</html>

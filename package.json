@@ -1,0 +1,65 @@
+{
+  "name": "claude-usage-pet",
+  "version": "1.0.0",
+  "description": "A coral pixel mascot (Clawd) that roams your screen and shows real Claude Code usage — plan limits, cost, streaks, and Tamagotchi-style care + gamification.",
+  "main": "main.js",
+  "bin": {
+    "claude-usage-pet": "bin/claude-usage-pet.js",
+    "clawd": "bin/claude-usage-pet.js"
+  },
+  "files": [
+    "main.js",
+    "usage.js",
+    "limits.js",
+    "game.js",
+    "preload.js",
+    "bin/",
+    "renderer/**",
+    "README.md"
+  ],
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist:mac": "electron-builder --mac",
+    "dist:win": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win"
+  },
+  "keywords": ["claude", "claude-code", "usage", "tokens", "menubar", "desktop-pet", "electron", "tamagotchi", "mascot"],
+  "engines": { "node": ">=18" },
+  "os": ["darwin", "win32", "linux"],
+  "author": "plugin87",
+  "license": "MIT",
+  "homepage": "https://github.com/plugin87/claude-usage-pet#readme",
+  "repository": { "type": "git", "url": "git+https://github.com/plugin87/claude-usage-pet.git" },
+  "bugs": { "url": "https://github.com/plugin87/claude-usage-pet/issues" },
+  "build": {
+    "appId": "com.plug.claudeusagepet",
+    "productName": "Claude Usage Pet",
+    "files": ["main.js", "usage.js", "limits.js", "game.js", "preload.js", "renderer/**"],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "build/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": true,
+      "target": [{ "target": "dmg", "arch": ["universal"] }, { "target": "zip", "arch": ["universal"] }]
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [{ "target": "nsis", "arch": ["x64"] }, { "target": "portable", "arch": ["x64"] }]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
+  },
+  "dependencies": {
+    "electron": "^33.0.0"
+  },
+  "devDependencies": {
+    "electron-builder": "^25.0.0"
+  }
+}
